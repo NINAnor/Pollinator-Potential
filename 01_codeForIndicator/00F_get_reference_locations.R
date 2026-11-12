@@ -152,12 +152,14 @@ if (!file.exists(nin_reference_file)) {
   good_seminatural_grassland <- nin_polygons %>%
     dplyr::filter(
       main_ecosystem == "semi-naturligMark",
-      tilstand == "god",
+      #tilstand == "god",
       naturtype %in% reference_naturtyper
     ) %>%
     dplyr::select(
       naturtype,
-      naturtypeKode
+      naturtypeKode,
+      tilstand,
+      naturmangfold
     )
   
   
@@ -423,4 +425,112 @@ ggplot2::ggsave(
   height = 10,
   units = "in",
   dpi = 600
+)
+
+library(sf)
+library(ggplot2)
+library(patchwork)
+
+# Calculate centroids
+grassland_centroids <- good_seminatural_grassland |>
+  st_centroid(of_largest_polygon = FALSE)
+
+# First row: polygon maps
+p_naturtype <- ggplot(good_seminatural_grassland) +
+  geom_sf(aes(fill = naturtype), colour = NA) +
+  labs(title = "Nature type", fill = "Nature type") +
+  theme_void() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold")
+  )
+
+p_naturmangfold <- ggplot(good_seminatural_grassland) +
+  geom_sf(aes(fill = naturmangfold), colour = NA) +
+  labs(title = "Nature diversity", fill = "Nature diversity") +
+  theme_void() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold")
+  )
+
+p_tilstand <- ggplot(good_seminatural_grassland) +
+  geom_sf(aes(fill = tilstand), colour = NA) +
+  labs(title = "Condition", fill = "Condition") +
+  theme_void() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold")
+  )
+
+# Second row: centroid maps
+p_centroid_naturtype <- ggplot() +
+  geom_sf(
+    data = grassland_centroids,
+    aes(colour = naturtype),
+    size = 0.6,
+    alpha = 0.7
+  ) +
+  labs(title = "Nature type — centroids", colour = "Nature type") +
+  theme_void() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold")
+  )
+
+p_centroid_naturmangfold <- ggplot() +
+  geom_sf(
+    data = grassland_centroids,
+    aes(colour = naturmangfold),
+    size = 0.6,
+    alpha = 0.7
+  ) +
+  labs(
+    title = "Nature diversity — centroids",
+    colour = "Nature diversity"
+  ) +
+  theme_void() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold")
+  )
+
+p_centroid_tilstand <- ggplot() +
+  geom_sf(
+    data = grassland_centroids,
+    aes(colour = tilstand),
+    size = 0.6,
+    alpha = 0.7
+  ) +
+  labs(title = "Condition — centroids", colour = "Condition") +
+  theme_void() +
+  theme(
+    legend.position = "bottom",
+    plot.title = element_text(face = "bold")
+  )
+
+# Combine into two rows and three columns
+p_grassland_comparison <-
+  (p_naturtype | p_naturmangfold | p_tilstand) /
+  (p_centroid_naturtype | p_centroid_naturmangfold | p_centroid_tilstand) +
+  plot_annotation(
+    title = "Semi-natural grassland classification",
+    subtitle = "Top row: polygons; bottom row: polygon centroids"
+  ) +
+  plot_layout(heights = c(1, 1))
+
+print(p_grassland_comparison)
+
+# Save
+ggsave(
+  filename = file.path(
+    resultFolder, "figures",
+    "grassland_classification_polygons_and_centroids.png"
+  ),
+  plot = p_grassland_comparison,
+  width = 18,
+  height = 12,
+  units = "in",
+  dpi = 300,
+  bg = "white"
 )

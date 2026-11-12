@@ -14,7 +14,8 @@ calculate_scaled_indicator <- function(
     clc_vars,
     cores = 1,
     overwrite = TRUE,
-    rerun = FALSE
+    rerun = FALSE,
+    use_max = FALSE
 ) {
   
   ## ========================================================
@@ -67,7 +68,10 @@ calculate_scaled_indicator <- function(
   ## ========================================================
   ## 2a. Calculate interaction-supported richness
   ## ========================================================
-  
+    if(overwrite | !file.exists(file.path(
+       resultFolder,
+      "insect_richness_sum.tif"
+    ))){
   richness_sum <- terra::app(
     richness,
     fun = sum,
@@ -79,6 +83,12 @@ calculate_scaled_indicator <- function(
     ),
     overwrite = overwrite
   )
+} else {
+ richness_sum <- terra::rast(file.path(
+       resultFolder,
+      "insect_richness_sum.tif"
+    ))     
+    }
   
   names(richness_sum) <- "insect_richness"
   
@@ -125,11 +135,18 @@ calculate_scaled_indicator <- function(
   ) 
   
   calibrated_richness <- insect_calibration$predicted_insect_richness
+    
+   reference_richness <-  insect_calibration$predicted_reference_richness
   } else {
     calibrated_richness <- terra::rast(file.path(
       resultFolder,
       paste0("predicted_insect_richness_", prediction_year,".tif")
     ))   
+
+    reference_richness <- terra::rast(file.path(
+      resultFolder,
+      paste0("predicted_reference_", prediction_year,".tif")
+    )) 
   }
   
   # calibrated_richness <- terra::project(
@@ -140,11 +157,18 @@ calculate_scaled_indicator <- function(
   
   names(calibrated_richness) <-
     "calibrated_insect_richness"
+
+  names(reference_richness) <-
+    "calibrated_insect_richness"
   
   ## ========================================================
   ## 3. Calculate richness without interactions
   ## ========================================================
   
+  if(overwrite | !file.exists(file.path(
+      resultFolder,
+      "insect_richness_without_interaction_sum.tif"
+    ))){
   richness_sum_without_interaction <- terra::app(
     insects,
     fun = sum,
@@ -156,6 +180,12 @@ calculate_scaled_indicator <- function(
     ),
     overwrite = overwrite
   )
+} else {
+ richness_sum_without_interaction <-   terra::rast(file.path(
+      resultFolder,
+      "insect_richness_without_interaction_sum.tif"
+    ))
+  }
   
   names(
     richness_sum_without_interaction
@@ -180,6 +210,10 @@ calculate_scaled_indicator <- function(
   ## 5. Extract both richness measures
   ## ========================================================
   
+  if(overwrite | !file.exists(file.path(
+      resultFolder,
+      "rasters_for_calculation.tif"
+    ))){
   richness_sum <- terra::project(
     richness_sum,
     calibrated_richness,
@@ -195,15 +229,35 @@ calculate_scaled_indicator <- function(
   reference_rasters <- c(
     richness_sum,
     richness_sum_without_interaction,
-    calibrated_richness
+    calibrated_richness,
+    reference_richness
   )
+
+  terra::writeRaster(
+  reference_rasters,
+  filename = file.path(
+      resultFolder,
+      "rasters_for_calculation.tif"
+    ),
+  overwrite = TRUE
+)
+    } else {
+      reference_rasters <- terra::rast(file.path(
+      resultFolder,
+      "rasters_for_calculation.tif"
+    ))
+    }
+  
+  names(reference_rasters) <- c("insect_richness", 
+                                "insect_richness_without_interaction",
+                                 "calibrated_insect_richness", 
+                                 "calibrated_reference_richness")
   
   reference_polygon_values <- terra::extract(
     reference_rasters,
     referencePolygons_vect,
-    fun = mean,
-    na.rm = TRUE,
-    exact = TRUE
+    ID = TRUE
+    #exact = TRUE
   )
   
   
@@ -330,6 +384,11 @@ calculate_scaled_indicator <- function(
         insect_richness,
         na.rm = TRUE
       ),
+
+      median_richness =  median(
+        insect_richness,
+        na.rm = TRUE
+      ),
       
       ## --------------------------------------------
       ## Richness without interaction
@@ -352,6 +411,12 @@ calculate_scaled_indicator <- function(
           insect_richness_without_interaction,
           na.rm = TRUE
         ),
+
+      median_richness_without_interaction =
+        median(
+          insect_richness_without_interaction,
+          na.rm = TRUE
+        ),
       
       ## --------------------------------------------
       ## Caliberated richness
@@ -371,6 +436,12 @@ calculate_scaled_indicator <- function(
       
       max_cal_richness =
         max(
+          calibrated_richness,
+          na.rm = TRUE
+        ),
+
+              median_cal_richness =
+        median(
           calibrated_richness,
           na.rm = TRUE
         ),
@@ -402,6 +473,10 @@ calculate_scaled_indicator <- function(
     reference_values_raw$insect_richness,
     na.rm = TRUE
   )
+    global_ref_median <- median(
+    reference_values_raw$insect_richness,
+    na.rm = TRUE
+  )
   
   
   ## Without interaction
@@ -419,6 +494,12 @@ calculate_scaled_indicator <- function(
       insect_richness_without_interaction,
     na.rm = TRUE
   )
+
+    global_ref_median_without_interaction <- median(
+    reference_values_raw$
+      insect_richness_without_interaction,
+    na.rm = TRUE
+  )
   
   # With caliberation
   
@@ -430,6 +511,11 @@ calculate_scaled_indicator <- function(
   global_ref_min_caliberation <- 0
   
   global_ref_max_caliberation <- max(
+    reference_values_raw$calibrated_richness,
+    na.rm = TRUE
+  )
+
+    global_ref_median_caliberation <- median(
     reference_values_raw$calibrated_richness,
     na.rm = TRUE
   )
@@ -526,14 +612,17 @@ calculate_scaled_indicator <- function(
           ## Interaction-supported
           min_richness,
           max_richness,
+          median_richness,
           
           ## Without interaction
           min_richness_without_interaction,
           max_richness_without_interaction,
+           median_richness_without_interaction,
           
           #Caliberation
           min_cal_richness,
-          max_cal_richness 
+          max_cal_richness,
+          median_cal_richness 
         ),
       by = "nature_region"
     )
@@ -655,7 +744,22 @@ calculate_scaled_indicator <- function(
   #ref_min <- region_lookup$min_richness
   ref_min <- rep(0, length(region_lookup$min_richness))
   
+  if(use_max){
   ref_max <- region_lookup$max_richness
+      ref_max_without_interaction <-
+    region_lookup$
+    max_richness_without_interaction
+    
+      ref_cal_max <- region_lookup$max_cal_richness
+  } else {
+    ref_max <- region_lookup$max_richness  
+
+          ref_max_without_interaction <-
+    region_lookup$
+    median_richness_without_interaction
+    
+      ref_cal_max <- region_lookup$median_cal_richness
+  }
   
   
   ## Without interaction
@@ -663,12 +767,10 @@ calculate_scaled_indicator <- function(
   ref_min_without_interaction <-
   rep(0,  length(region_lookup$min_richness_without_interaction))
   
-  ref_max_without_interaction <-
-    region_lookup$
-    max_richness_without_interaction
+
   
   ref_cal_min <- rep(0, length(region_lookup$min_cal_richness))
-  ref_cal_max <- region_lookup$max_cal_richness
+
   
   
   ## ========================================================

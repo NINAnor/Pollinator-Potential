@@ -40,7 +40,8 @@ fit_predict_insect_calibration <- function(
     cores = 1,
     overwrite = TRUE,
     seed = 12345,
-    checks = FALSE
+    checks = FALSE,
+    ref_locs
 ) {
   
   
@@ -1277,7 +1278,48 @@ fit_predict_insect_calibration <- function(
     predicted_insect_richness
   ) <- "predicted_insect_richness"
   
+  #####################################################################
+  # 24. PREDICT RICHNESS AT REFERENCE LOCATIONS
+  #####################################################################
+
+  prediction_raster_ref_locs <- c(
+    prediction_raster_scaled,
+    nature_region_raster
+  ) %>%
+    terra::mask(
+    .,
+    ref_locs
+  )
   
+  # Output for results
+  prediction_output <- if (!is.null(output_folder)) {
+    
+    file.path(
+      output_folder,
+      paste0("predicted_reference_", prediction_year,".tif")
+    )
+    
+  } else {
+    
+    NULL
+  }
+
+  # Predict over reference regions
+  predicted_reference_richness <- terra::predict(
+    prediction_raster_ref_locs,
+    insect_model,
+    fun = predict_insect_richness,
+    na.rm = TRUE,
+    cores = cores,
+    filename = prediction_output,
+    overwrite = overwrite
+  )
+  
+  
+  names(
+    predicted_reference_richness
+  ) <- "predicted_insect_richness"
+
   ################################################################################
   # 24. RETURN RESULTS
   ################################################################################
@@ -1288,6 +1330,11 @@ fit_predict_insect_calibration <- function(
       # Final spatial prediction
       predicted_insect_richness =
         predicted_insect_richness,
+
+      # Final reference prediction
+      predicted_reference_richness = 
+        predicted_reference_richness,
+
       
       # Selected model
       insect_model =

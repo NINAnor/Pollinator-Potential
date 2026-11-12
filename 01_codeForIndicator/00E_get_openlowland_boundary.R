@@ -136,7 +136,22 @@ if (useCLCplusForLowlandBoundary) {
 }
 
 
+if (useCLCplusForLowlandBoundary && useCLCForLowlandBoundary) {
+  stop("Set only one of useCLCplusForLowlandBoundary / useCLCForLowlandBoundary to TRUE.")
+}
+
+for (d in c("polygons", "figures")) {
+  dir.create(file.path(resultFolder, d), recursive = TRUE, showWarnings = FALSE)
+}
+
 if(useCLCForLowlandBoundary){
+  openlowland_mask_file <- file.path(
+    resultFolder,
+    "polygons",
+    "openlowland_mask_CLC100_50m.tif"
+  )
+  
+  if (!file.exists(openlowland_mask_file)) {
   project_dir <- "C:/Users/KWAKU~1.ADJ/ONEDRI~1/222608~1"
   
   CLC100m <- terra::rast(
@@ -162,25 +177,25 @@ if(useCLCForLowlandBoundary){
     NA
   )
   
-  open_lowland_crop <- terra::crop(open_lowland, 
-                                   terra::project(allCalibrationRaster[[1]], crs(open_lowland))) %>%
-    terra::mask(terra::project(allCalibrationRaster[[1]], crs(open_lowland)))
+  target_in_clc_crs <- terra::project(
+    allCalibrationRaster[[1]],
+    terra::crs(open_lowland)
+  )
   
+  open_lowland_crop <- terra::crop(open_lowland, target_in_clc_crs) |>
+    terra::mask(target_in_clc_crs)
   
-  
-  openlowland_50m <- terra::project(
+  terra::project(
     open_lowland_crop,
     allCalibrationRaster[[1]],
     method = "near",
     filename = openlowland_mask_file,
     overwrite = TRUE
   )
-  
- 
-  
-
-  
   }
+  
+  openlowland_binary <- terra::rast(openlowland_mask_file)
+}
 
 # ==============================================================================
 # METHOD 2: Define open lowland using a percentage threshold
@@ -249,8 +264,7 @@ if (!useCLCForLowlandBoundary && !useCLCplusForLowlandBoundary) {
     ## --------------------------------------------------------
     ## Extract open-lowland percentage at unique ASO locations
     ## --------------------------------------------------------
-    aso_locations <- aso_plant_richness %>%
-      dplyr::distinct(geometry)
+    aso_locations <- aso_plant_richness[!duplicated(sf::st_as_text(sf::st_geometry(aso_plant_richness))), ]
     
     thresholdVals <- terra::extract(
       openlowland_boundary,
@@ -393,3 +407,135 @@ terra::plot(
 )
 
 dev.off()
+
+
+# Update the boundary to ensure ASO and ANO locations are there
+
+  openlowland_mask_file <- file.path(
+    resultFolder,
+    "polygons",
+    "openlowland_with_survey_locs.tif"
+  )
+
+if(!file.exists(openlowland_mask_file)){
+
+  # `openlowland_binary` is already defined by whichever method ran above
+# ============================================================
+# 1. Rasterize all survey locations
+# ============================================================
+
+# Convert survey locations to terra vector
+survey_vect <- terra::vect(survey_locs)
+
+# Rasterize survey points using the existing raster grid
+survey_raster <- terra::rasterize(
+  survey_vect,
+  openlowland_binary,
+  field = 1,
+  background = NA
+)
+
+# Copy the original raster and set survey cells to 1
+openlowland_binary_with_survey_locs <- openlowland_binary
+
+openlowland_binary_with_survey_locs[
+  !is.na(survey_raster)
+] <- 1
+
+
+# ============================================================
+# 2. Identify insect polygons corresponding to ASO locations
+# ============================================================
+load(file.path(dataFolder, "insect_locations.Rdata"))
+
+# Select ASO survey points
+aso_points <- survey_locs |>
+  dplyr::filter(dataset == "ASO")
+
+# Ensure the CRS matches
+aso_points <- sf::st_transform(
+  aso_points,
+  sf::st_crs(insect_locations)
+)
+
+# Identify insect polygons intersecting ASO points
+aso_matches <- sf::st_intersects(
+  insect_locations,
+  aso_points
+)
+
+# Retain polygons intersecting at least one ASO point
+aso_polygons <- insect_locations[
+  lengths(aso_matches) > 0,
+]
+
+# Convert polygons to terra vector
+aso_polygons_vect <- terra::vect(aso_polygons)
+
+
+# ============================================================
+# 3. Rasterize ASO polygons and set covered cells to 1
+# ============================================================
+
+aso_polygon_raster <- terra::rasterize(
+  aso_polygons_vect,
+  openlowland_binary,
+  field = 1,
+  background = NA,
+  touches = TRUE
+)
+
+# Set all cells touched by ASO polygons to 1
+openlowland_binary_with_survey_locs[
+  !is.na(aso_polygon_raster)
+] <- 1
+
+  
+terra::writeRaster(
+      openlowland_binary_with_survey_locs,
+      openlowland_mask_file,
+      overwrite = FALSE
+    )
+
+# ============================================================
+# 4. Validate survey point values
+# ============================================================
+
+survey_values <- terra::extract(
+  openlowland_binary_with_survey_locs,
+  survey_vect,
+  na.rm = FALSE
+)
+
+# Check whether all survey locations have value 1
+all_survey_points_are_one <- all(
+  survey_values[, 2] == 1,
+  na.rm = FALSE
+)
+
+all_survey_points_are_one
+
+
+# ============================================================
+# 5. Validate ASO polygon raster cells
+# ============================================================
+
+raster_values <- terra::values(
+  openlowland_binary_with_survey_locs,
+  mat = FALSE
+)
+
+polygon_cells <- terra::values(
+  !is.na(aso_polygon_raster),
+  mat = FALSE
+)
+
+all_aso_polygon_cells_are_one <- all(
+  raster_values[polygon_cells] == 1
+)
+
+all_aso_polygon_cells_are_one
+  
+} else {
+  openlowland_binary_with_survey_locs <- terra::rast(openlowland_mask_file)
+}
