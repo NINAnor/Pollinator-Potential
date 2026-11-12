@@ -99,7 +99,14 @@ options(encoding = "UTF-8")
 
 dataFolder <- "Data"
 
-resultFolder <- "C:/ninaProjects/pollinatorIndicator/kwakuAugust2026/kwakuAugust2026"
+resultFolder <- normalizePath(
+#  "C:\\Users\\kwaku.adjei\\OneDrive - NINA\\222608 - Indikatorutvikling for åpent lavland 2026 - Documents\\4. Data\\CLC for kwaku\\pollinatorIndicator\\kwakuAugust2026\\kwakuAugust2026"
+"C:\\Users\\kwaku.adjei\\OneDrive - NINA\\222608 - Indikatorutvikling for åpent lavland 2026 - kwakuAugust2026"
+)
+
+#dir.exists(resultFolder)
+
+#resultFolder <- "C:/ninaProjects/pollinatorIndicator/kwakuAugust2026/kwakuAugust2026"
 
 
 ## ------------------------------------------------------------------
@@ -217,19 +224,6 @@ vars_of_interest <- c(
 
 source("01_codeForEnvAgency/00D_get_calibration_raster.R")
 
-# ==============================================================================
-# 8. CREATE OPEN-LOWLAND MASK
-# ==============================================================================
-useCLCForLowlandBoundary <- FALSE
-useCLCplusForLowlandBoundary <- TRUE
-source("01_codeForEnvAgency/00E_get_openlowland_boundary.R")
-
-
-# ==============================================================================
-# 9. LOAD REFERENCE LOCATIONS
-# ==============================================================================
-source("01_codeForEnvAgency/00F_get_reference_locations.R")
-
 ## -----------------------
 ## ASO and ANO data locations
 ## -----------------------
@@ -239,6 +233,11 @@ source("01_codeForEnvAgency/04_process_ANO_data.R")
 
 evaluation_locs <- bind_rows(aso_plant_richness,
                              ano_plant_richness)
+
+
+  survey_locs <- evaluation_locs %>%
+    dplyr::select(dataset)
+
 
 dataset_colours <- c(
   "ASO" = "#0072B2",
@@ -303,6 +302,24 @@ ggsave(
   units = "in",
   dpi = 600
 )
+
+
+# ==============================================================================
+# 8. CREATE OPEN-LOWLAND MASK
+# ==============================================================================
+useCLCForLowlandBoundary <- FALSE
+useCLCplusForLowlandBoundary <- TRUE
+source("01_codeForEnvAgency/00E_get_openlowland_boundary.R")
+
+
+
+
+# ==============================================================================
+# 9. LOAD REFERENCE LOCATIONS
+# ==============================================================================
+source("01_codeForEnvAgency/00F_get_reference_locations.R")
+
+
 
 # ==============================================================================
 # 10. DEFINE BIOGEOGRAPHIC CLASSIFICATION REGIONS
@@ -552,9 +569,11 @@ progress_bar <- utils::txtProgressBar(
   # ------------------------------------------------------------------
   rerunCalibrationModel <- FALSE
   rerunIndicators <- FALSE
+use_max = FALSE
+overwrite = FALSE
   if(rerunIndicators){
   source(
-    "01_codeForEnvAgency/02_scaledIndicator.R"
+    "01_codeForEnvAgency/02_scaledIndicator_alternative.R"
   )
   }
   
@@ -567,6 +586,20 @@ progress_bar <- utils::txtProgressBar(
     "01_codeForEnvAgency/03b_get_indices_plot.R"
   )
   
+
+    source(
+    "01_codeForEnvAgency/03c_get_indices_plot_ASO.R"
+  )
+
+    source(
+    "01_codeForEnvAgency/03d_get_indices_plot_ANO.R"
+  )
+
+    source(
+    "01_codeForEnvAgency/03g_get_indices_plot_ASO_ANO.R"
+  )
+
+  source("01_codeForEnvAgency/03e_processIndicesResults.R")
   # ------------------------------------------------------------------
   # Evaluate the indices
   # ------------------------------------------------------------------

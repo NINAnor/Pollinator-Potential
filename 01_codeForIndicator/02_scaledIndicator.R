@@ -48,6 +48,8 @@ source(
   "01_codeForEnvAgency/02_scaledIndicatorFunction.R"
 )
 
+source("01_codeForEnvAgency/02_calculate_reference_values.R")
+
 
 # ==============================================================================
 # 2. Load observed insect richness
@@ -337,7 +339,7 @@ indicator_results <- calculate_scaled_indicator(
   # --------------------------------------------------------------------------
   
   study_region =
-    openlowland_binary,
+    openlowland_binary_with_survey_locs,
   
   
   # --------------------------------------------------------------------------
@@ -437,7 +439,12 @@ indicator_results <- calculate_scaled_indicator(
   # --------------------------------------------------------------------------
   
   rerun =
-    rerunCalibrationModel
+    rerunCalibrationModel,
+
+  use_max = use_max,
+
+  # overwrite the results
+  overwrite = overwrite
 )
 
 
